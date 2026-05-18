@@ -1,4 +1,5 @@
 node_modules
+scripts/.venv-favicon
 .bun
 .turbo
 .DS_Store
