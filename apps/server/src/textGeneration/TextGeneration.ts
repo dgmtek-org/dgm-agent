@@ -14,6 +14,7 @@ export type TextGenerationProvider =
   | "codex"
   | "claudeAgent"
   | "cursor"
+  | "gemini"
   | "githubCopilot"
   | "opencode";
 

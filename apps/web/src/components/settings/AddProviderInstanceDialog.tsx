@@ -13,7 +13,7 @@ import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Button } from "../ui/button";
-import { ACPRegistryIcon, Gemini, PiAgentIcon, type Icon } from "../Icons";
+import { ACPRegistryIcon, PiAgentIcon, type Icon } from "../Icons";
 import {
   Dialog,
   DialogDescription,
@@ -71,11 +71,6 @@ interface ComingSoonDriverOption {
 }
 
 const COMING_SOON_DRIVER_OPTIONS: readonly ComingSoonDriverOption[] = [
-  {
-    value: ProviderDriverKind.make("gemini"),
-    label: "Gemini",
-    icon: Gemini,
-  },
   {
     value: ProviderDriverKind.make("acpRegistry"),
     label: "ACP Registry",

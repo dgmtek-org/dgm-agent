@@ -131,6 +131,7 @@ const CODEX_DRIVER_KIND = ProviderDriverKind.make("codex");
 const CLAUDE_DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const CURSOR_DRIVER_KIND = ProviderDriverKind.make("cursor");
 const GITHUB_COPILOT_DRIVER_KIND = ProviderDriverKind.make("githubCopilot");
+const GEMINI_DRIVER_KIND = ProviderDriverKind.make("gemini");
 const OPENCODE_DRIVER_KIND = ProviderDriverKind.make("opencode");
 
 export const DEFAULT_MODEL = "gpt-5.4";
@@ -141,6 +142,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Partial<Record<ProviderDriverKind, strin
   [CLAUDE_DRIVER_KIND]: "claude-sonnet-4-6",
   [CURSOR_DRIVER_KIND]: "auto",
   [GITHUB_COPILOT_DRIVER_KIND]: "auto",
+  [GEMINI_DRIVER_KIND]: "gemini-2.5-pro",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
 };
 
@@ -152,6 +154,7 @@ export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER: Partial<
   [CLAUDE_DRIVER_KIND]: "claude-haiku-4-5",
   [CURSOR_DRIVER_KIND]: "composer-2",
   [GITHUB_COPILOT_DRIVER_KIND]: "gpt-5.4-mini",
+  [GEMINI_DRIVER_KIND]: "gemini-2.5-flash",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
 };
 
@@ -200,6 +203,11 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Partial<
     "5.2-codex": "gpt-5.2-codex",
     "5.2": "gpt-5.2",
   },
+  [GEMINI_DRIVER_KIND]: {
+    "2.5-pro": "gemini-2.5-pro",
+    "2.5-flash": "gemini-2.5-flash",
+    "2.5-flash-lite": "gemini-2.5-flash-lite",
+  },
   [OPENCODE_DRIVER_KIND]: {},
 };
 
@@ -210,5 +218,6 @@ export const PROVIDER_DISPLAY_NAMES: Partial<Record<ProviderDriverKind, string>>
   [CLAUDE_DRIVER_KIND]: "Claude",
   [CURSOR_DRIVER_KIND]: "Cursor",
   [GITHUB_COPILOT_DRIVER_KIND]: "GitHub Copilot",
+  [GEMINI_DRIVER_KIND]: "Gemini",
   [OPENCODE_DRIVER_KIND]: "OpenCode",
 };

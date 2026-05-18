@@ -129,6 +129,12 @@ function createBaseServerConfig(): ServerConfig {
           homePath: "",
           customModels: [],
         },
+        gemini: {
+          enabled: true,
+          binaryPath: "",
+          homePath: "",
+          customModels: [],
+        },
         opencode: {
           enabled: true,
           binaryPath: "",
