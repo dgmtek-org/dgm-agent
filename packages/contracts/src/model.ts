@@ -142,7 +142,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Partial<Record<ProviderDriverKind, strin
   [CLAUDE_DRIVER_KIND]: "claude-sonnet-4-6",
   [CURSOR_DRIVER_KIND]: "auto",
   [GITHUB_COPILOT_DRIVER_KIND]: "auto",
-  [GEMINI_DRIVER_KIND]: "gemini-2.5-pro",
+  [GEMINI_DRIVER_KIND]: "gemini-2.5-flash",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
 };
 

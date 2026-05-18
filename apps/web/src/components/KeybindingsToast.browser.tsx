@@ -101,7 +101,7 @@ function createBaseServerConfig(): ServerConfig {
     },
     settings: {
       ...DEFAULT_SERVER_SETTINGS,
-      enableAssistantStreaming: false,
+      enableAssistantStreaming: true,
       defaultThreadEnvMode: "local" as const,
       textGenerationModelSelection: {
         instanceId: ProviderInstanceId.make("codex"),

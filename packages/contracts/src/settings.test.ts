@@ -15,6 +15,7 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
 
   it("decodes a fully empty config (legacy on-disk shape) without complaint", () => {
     const decoded = decodeServerSettings({});
+    expect(decoded.enableAssistantStreaming).toBe(true);
     expect(decoded.providerInstances).toEqual({});
     // Legacy `providers` struct is still hydrated with its per-driver defaults
     // so existing call sites keep working through the migration.

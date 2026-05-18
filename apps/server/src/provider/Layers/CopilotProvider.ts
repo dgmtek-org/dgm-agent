@@ -135,8 +135,8 @@ function flattenCopilotModels(
         slug,
         name,
         ...(nonEmptyString(model.description) && model.description !== name
-          ? { shortName: name, subProvider: "GitHub Copilot" }
-          : { subProvider: "GitHub Copilot" }),
+          ? { shortName: name }
+          : {}),
         isCustom: false,
         capabilities:
           slug === currentModel ? currentCapabilities : DEFAULT_COPILOT_MODEL_CAPABILITIES,

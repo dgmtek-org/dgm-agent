@@ -42,21 +42,18 @@ const BUILT_IN_GEMINI_MODELS = [
   {
     slug: "gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
-    subProvider: "Google",
     isCustom: false,
     capabilities: DEFAULT_GEMINI_MODEL_CAPABILITIES,
   },
   {
     slug: "gemini-2.5-flash",
     name: "Gemini 2.5 Flash",
-    subProvider: "Google",
     isCustom: false,
     capabilities: DEFAULT_GEMINI_MODEL_CAPABILITIES,
   },
   {
     slug: "gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash Lite",
-    subProvider: "Google",
     isCustom: false,
     capabilities: DEFAULT_GEMINI_MODEL_CAPABILITIES,
   },

@@ -9,8 +9,12 @@ import {
   type ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PubSub from "effect/PubSub";
@@ -22,7 +26,12 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
-import { buildGeminiPromptArgs, makeGeminiEnvironment, runGeminiPrompt } from "../geminiCli.ts";
+import {
+  buildGeminiPromptArgs,
+  type GeminiPromptResult,
+  makeGeminiEnvironment,
+  runGeminiPrompt,
+} from "../geminiCli.ts";
 import {
   ProviderAdapterRequestError,
   ProviderAdapterSessionNotFoundError,
@@ -33,12 +42,14 @@ import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 
 const PROVIDER = ProviderDriverKind.make("gemini");
 const GEMINI_RESUME_VERSION = 1 as const;
+const GEMINI_TURN_TIMEOUT_MS = 180_000;
 
 interface GeminiSessionContext {
   readonly threadId: ThreadId;
   readonly cwd: string;
   session: ProviderSession;
   readonly turns: Array<{ id: TurnId; items: Array<unknown> }>;
+  activeCancel: Deferred.Deferred<void> | undefined;
   activeTurnId: TurnId | undefined;
   stopped: boolean;
 }
@@ -61,6 +72,14 @@ function appendAttachmentReferences(input: {
 
 function yoloForRuntimeMode(runtimeMode: RuntimeMode): boolean {
   return runtimeMode === "full-access";
+}
+
+function failureDetail(cause: Cause.Cause<unknown>): string {
+  const pretty = Cause.prettyErrors(cause)
+    .map((error) => error.message.trim())
+    .filter(Boolean)
+    .join("\n");
+  return pretty || "Gemini CLI request failed or was interrupted.";
 }
 
 export function makeGeminiAdapter(
@@ -121,6 +140,9 @@ export function makeGeminiAdapter(
       Effect.gen(function* () {
         if (ctx.stopped) return;
         ctx.stopped = true;
+        if (ctx.activeCancel) {
+          yield* Deferred.succeed(ctx.activeCancel, undefined).pipe(Effect.ignore);
+        }
         sessions.delete(ctx.threadId);
         yield* offerRuntimeEvent({
           type: "session.exited",
@@ -180,6 +202,7 @@ export function makeGeminiAdapter(
             cwd,
             session,
             turns: [],
+            activeCancel: undefined,
             activeTurnId: undefined,
             stopped: false,
           };
@@ -215,63 +238,64 @@ export function makeGeminiAdapter(
       );
 
     const sendTurn: ProviderAdapterShape<ProviderAdapterError>["sendTurn"] = (input) =>
-      withThreadLock(
-        input.threadId,
-        Effect.gen(function* () {
-          const ctx = yield* requireSession(input.threadId);
-          const turnId = TurnId.make(crypto.randomUUID());
-          const turnModelSelection =
-            input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
-          const model = turnModelSelection?.model ?? ctx.session.model ?? "gemini-2.5-pro";
-          ctx.activeTurnId = turnId;
-          ctx.session = {
-            ...ctx.session,
-            activeTurnId: turnId,
-            model,
-            updatedAt: yield* nowIso,
-          };
-
-          yield* offerRuntimeEvent({
-            type: "turn.started",
-            ...(yield* makeEventStamp()),
-            provider: PROVIDER,
-            providerInstanceId: boundInstanceId,
-            threadId: input.threadId,
-            turnId,
-            payload: { model },
-          });
-
-          const attachmentPaths: string[] = [];
-          if (input.attachments && input.attachments.length > 0) {
-            for (const attachment of input.attachments) {
-              const attachmentPath = resolveAttachmentPath({
-                attachmentsDir: serverConfig.attachmentsDir,
-                attachment,
-              });
-              if (!attachmentPath) {
-                return yield* new ProviderAdapterRequestError({
-                  provider: PROVIDER,
-                  method: "gemini.prompt",
-                  detail: `Invalid attachment id '${attachment.id}'.`,
-                });
-              }
-              attachmentPaths.push(attachmentPath);
-            }
-          }
-
-          const prompt = appendAttachmentReferences({
-            prompt: input.input ?? "",
-            paths: attachmentPaths,
-          });
-          if (!prompt.trim()) {
-            return yield* new ProviderAdapterValidationError({
-              provider: PROVIDER,
-              operation: "sendTurn",
-              issue: "Turn requires non-empty text or attachments.",
+      Effect.gen(function* () {
+        const ctx = yield* requireSession(input.threadId);
+        const turnId = TurnId.make(crypto.randomUUID());
+        const turnModelSelection =
+          input.modelSelection?.instanceId === boundInstanceId ? input.modelSelection : undefined;
+        const model = turnModelSelection?.model ?? ctx.session.model ?? "gemini-2.5-flash";
+        const attachmentPaths: string[] = [];
+        if (input.attachments && input.attachments.length > 0) {
+          for (const attachment of input.attachments) {
+            const attachmentPath = resolveAttachmentPath({
+              attachmentsDir: serverConfig.attachmentsDir,
+              attachment,
             });
+            if (!attachmentPath) {
+              return yield* new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "gemini.prompt",
+                detail: `Invalid attachment id '${attachment.id}'.`,
+              });
+            }
+            attachmentPaths.push(attachmentPath);
           }
+        }
 
-          const result = yield* runGeminiPrompt({
+        const prompt = appendAttachmentReferences({
+          prompt: input.input ?? "",
+          paths: attachmentPaths,
+        });
+        if (!prompt.trim()) {
+          return yield* new ProviderAdapterValidationError({
+            provider: PROVIDER,
+            operation: "sendTurn",
+            issue: "Turn requires non-empty text or attachments.",
+          });
+        }
+
+        const activeCancel = yield* Deferred.make<void>();
+        ctx.activeCancel = activeCancel;
+        ctx.activeTurnId = turnId;
+        ctx.session = {
+          ...ctx.session,
+          activeTurnId: turnId,
+          model,
+          updatedAt: yield* nowIso,
+        };
+
+        yield* offerRuntimeEvent({
+          type: "turn.started",
+          ...(yield* makeEventStamp()),
+          provider: PROVIDER,
+          providerInstanceId: boundInstanceId,
+          threadId: input.threadId,
+          turnId,
+          payload: { model },
+        });
+
+        const promptEffect: Effect.Effect<GeminiPromptResult, ProviderAdapterRequestError> =
+          runGeminiPrompt({
             settings: geminiSettings,
             environment,
             cwd: ctx.cwd,
@@ -289,57 +313,41 @@ export function makeGeminiAdapter(
                   cause,
                 }),
             ),
+            Effect.timeoutOption(Duration.millis(GEMINI_TURN_TIMEOUT_MS)),
+            Effect.flatMap(
+              Option.match({
+                onNone: () =>
+                  Effect.fail(
+                    new ProviderAdapterRequestError({
+                      provider: PROVIDER,
+                      method: "gemini.prompt",
+                      detail: `Gemini CLI request timed out after ${Math.round(GEMINI_TURN_TIMEOUT_MS / 1000)} seconds.`,
+                    }),
+                  ),
+                onSome: (result) => Effect.succeed(result),
+              }),
+            ),
           );
 
-          const output = result.stdout.trim();
-          if (result.exitCode !== 0) {
-            const detail =
-              result.stderr.trim() || output || `Gemini exited with code ${result.exitCode}.`;
-            return yield* new ProviderAdapterRequestError({
-              provider: PROVIDER,
-              method: "gemini.prompt",
-              detail,
-            });
-          }
+        const cancelledEffect: Effect.Effect<never, ProviderAdapterRequestError> = Deferred.await(
+          activeCancel,
+        ).pipe(
+          Effect.flatMap(() =>
+            Effect.fail(
+              new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "gemini.prompt",
+                detail: "Gemini turn was interrupted.",
+              }),
+            ),
+          ),
+        );
 
-          if (output) {
-            yield* offerRuntimeEvent({
-              type: "content.delta",
-              ...(yield* makeEventStamp()),
-              provider: PROVIDER,
-              providerInstanceId: boundInstanceId,
-              threadId: input.threadId,
-              turnId,
-              payload: {
-                streamKind: "assistant_text",
-                delta: output,
-              },
-            });
-          }
+        const promptExit = yield* Effect.exit(Effect.raceFirst(promptEffect, cancelledEffect));
+        ctx.activeCancel = undefined;
 
-          ctx.turns.push({
-            id: turnId,
-            items: [
-              {
-                command: geminiSettings.binaryPath || "gemini",
-                args: buildGeminiPromptArgs({
-                  model,
-                  yolo: yoloForRuntimeMode(ctx.session.runtimeMode),
-                }),
-                prompt,
-                stdout: result.stdout,
-                stderr: result.stderr,
-                exitCode: result.exitCode,
-              },
-            ],
-          });
-          ctx.session = {
-            ...ctx.session,
-            activeTurnId: turnId,
-            updatedAt: yield* nowIso,
-            model,
-          };
-
+        if (Exit.isFailure(promptExit)) {
+          const detail = failureDetail(promptExit.cause);
           yield* offerRuntimeEvent({
             type: "turn.completed",
             ...(yield* makeEventStamp()),
@@ -347,19 +355,105 @@ export function makeGeminiAdapter(
             providerInstanceId: boundInstanceId,
             threadId: input.threadId,
             turnId,
-            payload: { state: "completed" },
+            payload: {
+              state: ctx.stopped ? "cancelled" : "failed",
+              errorMessage: detail,
+            },
           });
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "gemini.prompt",
+            detail,
+            cause: promptExit.cause,
+          });
+        }
 
-          return {
+        const result = promptExit.value;
+        const output = result.stdout.trim();
+        if (result.exitCode !== 0) {
+          const detail =
+            result.stderr.trim() || output || `Gemini exited with code ${result.exitCode}.`;
+          yield* offerRuntimeEvent({
+            type: "turn.completed",
+            ...(yield* makeEventStamp()),
+            provider: PROVIDER,
+            providerInstanceId: boundInstanceId,
             threadId: input.threadId,
             turnId,
-            resumeCursor: ctx.session.resumeCursor,
-          };
-        }),
-      );
+            payload: {
+              state: "failed",
+              errorMessage: detail,
+            },
+          });
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "gemini.prompt",
+            detail,
+          });
+        }
 
-    const interruptTurn: ProviderAdapterShape<ProviderAdapterError>["interruptTurn"] = () =>
-      Effect.void;
+        if (output) {
+          yield* offerRuntimeEvent({
+            type: "content.delta",
+            ...(yield* makeEventStamp()),
+            provider: PROVIDER,
+            providerInstanceId: boundInstanceId,
+            threadId: input.threadId,
+            turnId,
+            payload: {
+              streamKind: "assistant_text",
+              delta: output,
+            },
+          });
+        }
+
+        ctx.turns.push({
+          id: turnId,
+          items: [
+            {
+              command: geminiSettings.binaryPath || "gemini",
+              args: buildGeminiPromptArgs({
+                model,
+                yolo: yoloForRuntimeMode(ctx.session.runtimeMode),
+              }),
+              prompt,
+              stdout: result.stdout,
+              stderr: result.stderr,
+              exitCode: result.exitCode,
+            },
+          ],
+        });
+        ctx.session = {
+          ...ctx.session,
+          activeTurnId: turnId,
+          updatedAt: yield* nowIso,
+          model,
+        };
+
+        yield* offerRuntimeEvent({
+          type: "turn.completed",
+          ...(yield* makeEventStamp()),
+          provider: PROVIDER,
+          providerInstanceId: boundInstanceId,
+          threadId: input.threadId,
+          turnId,
+          payload: { state: "completed" },
+        });
+
+        return {
+          threadId: input.threadId,
+          turnId,
+          resumeCursor: ctx.session.resumeCursor,
+        };
+      });
+
+    const interruptTurn: ProviderAdapterShape<ProviderAdapterError>["interruptTurn"] = (threadId) =>
+      Effect.gen(function* () {
+        const ctx = yield* requireSession(threadId);
+        if (ctx.activeCancel) {
+          yield* Deferred.succeed(ctx.activeCancel, undefined).pipe(Effect.ignore);
+        }
+      });
 
     const respondToRequest: ProviderAdapterShape<ProviderAdapterError>["respondToRequest"] = (
       threadId,

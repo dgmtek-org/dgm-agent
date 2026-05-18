@@ -13,6 +13,12 @@ import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
 
 export type GeminiCliSettings = Pick<GeminiSettings, "binaryPath" | "homePath">;
 
+export interface GeminiPromptResult {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number;
+}
+
 export const resolveGeminiCliHomePath = Effect.fn("resolveGeminiCliHomePath")(function* (
   config: Pick<GeminiSettings, "homePath">,
   baseEnv: NodeJS.ProcessEnv = process.env,
@@ -50,7 +56,7 @@ export function runGeminiPrompt(input: {
   readonly prompt: string;
   readonly yolo?: boolean;
 }): Effect.Effect<
-  { readonly stdout: string; readonly stderr: string; readonly exitCode: number },
+  GeminiPromptResult,
   PlatformError.PlatformError,
   ChildProcessSpawner.ChildProcessSpawner
 > {

@@ -1492,8 +1492,10 @@ describe("ProviderRuntimeIngestion", () => {
     expect(proposedPlan?.planMarkdown).toBe("## Buffered plan\n\n- first\n- second");
   });
 
-  it("buffers assistant deltas by default until completion", async () => {
-    const harness = await createHarness();
+  it("buffers assistant deltas until completion when streaming is disabled", async () => {
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const now = "2026-01-01T00:00:00.000Z";
 
     harness.emit({
@@ -1561,7 +1563,9 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("flushes and completes buffered assistant text when an approval request opens", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const now = "2026-01-01T00:00:00.000Z";
 
     harness.emit({
@@ -1621,7 +1625,9 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("flushes and completes buffered assistant text when user input is requested", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const now = "2026-01-01T00:00:00.000Z";
 
     harness.emit({
@@ -1688,7 +1694,9 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("does not create assistant segments for whitespace-only buffered text at approval boundaries", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const startedAt = "2026-03-28T06:28:00.000Z";
     const pausedAt = "2026-03-28T06:28:01.000Z";
 
@@ -1748,7 +1756,9 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("starts a new buffered assistant message segment after approval and completes without duplication", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const startedAt = "2026-03-28T06:07:00.000Z";
     const pausedAt = "2026-03-28T06:07:01.000Z";
     const resumedAt = "2026-03-28T06:07:02.000Z";
@@ -1880,7 +1890,7 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("starts a new streaming assistant message segment after approval", async () => {
-    const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+    const harness = await createHarness();
     const startedAt = "2026-03-28T07:00:00.000Z";
     const pausedAt = "2026-03-28T07:00:01.000Z";
     const resumedAt = "2026-03-28T07:00:02.000Z";
@@ -1987,7 +1997,7 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("streams assistant deltas when thread.turn.start requests streaming mode", async () => {
-    const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+    const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
 
     await Effect.runPromise(
@@ -2079,7 +2089,9 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("spills oversized buffered deltas and still finalizes full assistant text", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const now = "2026-01-01T00:00:00.000Z";
     const oversizedText = "x".repeat(40_000);
 
